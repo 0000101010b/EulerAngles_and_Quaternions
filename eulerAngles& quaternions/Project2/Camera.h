@@ -12,6 +12,8 @@ Camera Class from:
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "maths_funcs.h"
+
 
 
 // Defines several possible options for camera movement. Used as abstraction to stay away from window-system specific input methods
@@ -34,6 +36,8 @@ const GLfloat ZOOM = 45.0f;
 class Camera
 {
 public:
+	bool isEuler;
+	glm::vec3 Eangles;
 	// Camera Attributes
 	glm::vec3 Position;
 	glm::vec3 Front;
@@ -55,7 +59,8 @@ public:
 		this->WorldUp = up;
 		this->Yaw = yaw;
 		this->Pitch = pitch;
-		this->updateCameraVectors();
+		this->updateCameraVectors2();
+		//this->updateCameraVectors();
 	}
 	// Constructor with scalar values
 	Camera(GLfloat posX, GLfloat posY, GLfloat posZ, GLfloat upX, GLfloat upY, GLfloat upZ, GLfloat yaw, GLfloat pitch) : Front(glm::vec3(0.0f, 0.0f, -1.0f)), MovementSpeed(SPEED), MouseSensitivity(SENSITIVTY), Zoom(ZOOM)
@@ -64,7 +69,8 @@ public:
 		this->WorldUp = glm::vec3(upX, upY, upZ);
 		this->Yaw = yaw;
 		this->Pitch = pitch;
-		this->updateCameraVectors();
+		this->updateCameraVectors2();
+		//this->updateCameraVectors();
 	}
 
 	// Returns the view matrix calculated using Eular Angles and the LookAt Matrix
@@ -106,7 +112,8 @@ public:
 		}
 
 		// Update Front, Right and Up Vectors using the updated Eular angles
-		this->updateCameraVectors();
+		//this->updateCameraVectors();
+		this->updateCameraVectors2();
 	}
 
 	// Processes input received from a mouse scroll-wheel event. Only requires input on the vertical wheel-axis
@@ -120,7 +127,6 @@ public:
 			this->Zoom = 45.0f;
 	}
 
-private:
 	// Calculates the front vector from the Camera's (updated) Eular Angles
 	void updateCameraVectors()
 	{
@@ -129,9 +135,116 @@ private:
 		front.x = cos(glm::radians(this->Yaw)) * cos(glm::radians(this->Pitch));
 		front.y = sin(glm::radians(this->Pitch));
 		front.z = sin(glm::radians(this->Yaw)) * cos(glm::radians(this->Pitch));
+
 		this->Front = glm::normalize(front);
 		// Also re-calculate the Right and Up vector
 		this->Right = glm::normalize(glm::cross(this->Front, this->WorldUp));  // Normalize the vectors, because their length gets closer to 0 the more you look up or down which results in slower movement.
 		this->Up = glm::normalize(glm::cross(this->Right, this->Front));
+	}
+	
+	void updateCameraVectors2() {
+		
+		glm::mat4 R;
+
+		if (isEuler)
+		{
+			//euler angles
+			float xR[16] = {
+				1.0f,0,0,0,
+				0,cos(-Eangles.x),-sin(-Eangles.x),0,
+				0,sin(-Eangles.x),cos(-Eangles.x),0,
+				0,0,0,1.0f
+			};
+			glm::mat4 xRot = glm::make_mat4(xR);
+			float yR[16] = {
+				cos(-Eangles.y),0,sin(-Eangles.y),0,
+				0,1.0f,0,0,
+				-sin(-Eangles.y),0,cos(-Eangles.y),0,
+				0,0,0,1.0f
+			};
+			glm::mat4 yRot = glm::make_mat4(yR);
+
+			float zR[16] = {
+				cos(-Eangles.z),-sin(-Eangles.z),0,0,
+				sin(-Eangles.z),cos(-Eangles.z),0,0,
+				0,0,1.0f,0,
+				0,0,0,1.0f
+			};
+			glm::mat4 zRot = glm::make_mat4(zR);
+			
+			R= xRot*yRot*zRot;
+
+		}
+		else {
+
+			//quaternions
+
+			versor qX = quat_from_axis_rad(Eangles.x, 0.0f, 1.0f, 0.0f);
+			versor qY = quat_from_axis_rad(Eangles.y, 1.0f, 0.0f, 0.0f);
+			versor qZ = quat_from_axis_rad(Eangles.z, 0.0f, 0.0f, 1.0f);
+
+
+			versor q = qX*qY*qZ;
+
+			float w = q.q[0];
+			float x = q.q[1];
+			float y = q.q[2];
+			float z = q.q[3];
+
+			float quat[16]
+			{
+				1.0f - 2.0f * y * y - 2.0f * z * z,
+				2.0f * x * y - 2.0f * w * z,
+				2.0f * x * z + 2.0f * w * y,
+				0.0f,
+
+				2.0f * x * y + 2.0f * w * z,
+				1.0f - 2.0f * x * x - 2.0f * z * z,
+				2.0f * y * z - 2.0f * w * x,
+				0.0f,
+
+				2.0f * x * z - 2.0f * w * y,
+				2.0f * y * z + 2.0f * w * x,
+				1.0f - 2.0f * x * x - 2.0f * y * y,
+				0.0f,
+
+				0.0f,
+				0.0f,
+				0.0f,
+				1.0f
+			};
+
+			glm::mat4 qMatrix = glm::make_mat4(quat);
+			R = qMatrix;
+		}
+	
+		glm::vec4 forward = glm::vec4(0.0f, 0.0f, -1.0f, 1.0f);
+		forward = R*forward;
+		glm::vec4 up= glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+		up = R*up;
+		glm::vec4 right = glm::vec4(-1.0f, 0.0f, 0.0f, 1.0f);
+		right = R*right;
+
+		// Calculate the new Front vector
+		glm::vec3 front;
+		front.x = forward.x;
+		front.y = forward.y;
+		front.z = forward.z;
+		
+		glm::vec3 upV3;
+		upV3.x = up.x;
+		upV3.y = up.y;
+		upV3.z = up.z;
+
+		glm::vec3 rightV3;
+		rightV3.x = right.x;
+		rightV3.y = right.y;
+		rightV3.z = right.z;
+
+		this->Front = glm::normalize(front);
+		this->Up = glm::normalize(upV3);
+		this->Right =glm::normalize(rightV3);
+		//this->Right= glm::normalize(glm::cross(this->Front, this->WorldUp));
+
 	}
 };
